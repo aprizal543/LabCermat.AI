@@ -1,0 +1,261 @@
+// ============================================================
+// LabCermat — Prisma Schema v5.0
+// Sprint 1: roles, laboratories, users, samples,
+//           sample_status_logs, audit_logs
+// Sprint 4: sample_results
+// Sprint 5: qc_instruments, qc_records
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserStatus {
+  active
+  inactive
+}
+
+enum SampleStatus {
+  menunggu_pemeriksaan
+  dalam_proses
+  menunggu_review
+  tervalidasi
+  minta_cek_ulang
+  dibatalkan
+}
+
+enum SamplePriority {
+  rutin
+  urgent
+  cito
+}
+
+enum LaboratoryType {
+  klinik
+  rumah_sakit
+  farmasi
+  mandiri
+}
+
+enum QcStatus {
+  stabil
+  perlu_perhatian
+}
+
+// ============================================================
+// MODEL: Role
+// Dibuat pertama — users FK ke sini
+// ============================================================
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(50)
+  description String?
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+// ============================================================
+// MODEL: Laboratory
+// Dirancang multi-lab sejak awal
+// ============================================================
+
+model Laboratory {
+  id        String         @id @default(uuid()) @db.Uuid
+  name      String         @db.VarChar(255)
+  type      LaboratoryType
+  address   String?
+  contact   String?        @db.VarChar(100)
+  isActive  Boolean        @default(true) @map("is_active")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  users         User[]
+  samples       Sample[]
+  qcInstruments QcInstrument[]
+  qcRecords     QcRecord[]
+
+  @@map("laboratories")
+}
+
+// ============================================================
+// MODEL: User
+// Terhubung ke Supabase Auth via auth_user_id
+// ============================================================
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  authUserId   String     @unique @map("auth_user_id") @db.Uuid
+  fullName     String     @map("full_name") @db.VarChar(255)
+  email        String     @unique @db.VarChar(255)
+  status       UserStatus @default(active)
+  roleId       String     @map("role_id") @db.Uuid
+  laboratoryId String     @map("laboratory_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  laboratory Laboratory @relation(fields: [laboratoryId], references: [id])
+
+  samplesCreated    Sample[]          @relation("SampleCreatedBy")
+  statusLogsChanged SampleStatusLog[] @relation("StatusChangedBy")
+  auditLogs         AuditLog[]
+  resultsInput      SampleResult[]    @relation("ResultInputBy")
+  qcRecorded        QcRecord[]        @relation("QcRecordedBy")
+
+  @@map("users")
+}
+
+// ============================================================
+// MODEL: Sample
+// Inti workflow — status lifecycle lengkap
+// ============================================================
+
+model Sample {
+  id            String         @id @default(uuid()) @db.Uuid
+  sampleCode    String         @unique @map("sample_code") @db.VarChar(50)
+  laboratoryId  String         @map("laboratory_id") @db.Uuid
+  sampleType    String         @map("sample_type") @db.VarChar(100)
+  requestedTest String         @map("requested_test") @db.VarChar(255)
+  department    String?        @db.VarChar(100)
+  priority      SamplePriority @default(rutin)
+  status        SampleStatus   @default(menunggu_pemeriksaan)
+  receivedAt    DateTime?      @map("received_at")
+  createdBy     String         @map("created_by") @db.Uuid
+  notes         String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  laboratory Laboratory        @relation(fields: [laboratoryId], references: [id])
+  creator    User              @relation("SampleCreatedBy", fields: [createdBy], references: [id])
+  statusLogs SampleStatusLog[]
+  results    SampleResult[]
+
+  @@map("samples")
+}
+
+// ============================================================
+// MODEL: SampleResult
+// Input hasil pemeriksaan per parameter — oleh analis
+// ============================================================
+
+model SampleResult {
+  id            String   @id @default(uuid()) @db.Uuid
+  sampleId      String   @map("sample_id") @db.Uuid
+  parameterName String   @map("parameter_name") @db.VarChar(255)
+  value         String   @db.VarChar(100)
+  unit          String?  @db.VarChar(50)
+  referenceMin  String?  @map("reference_min") @db.VarChar(50)
+  referenceMax  String?  @map("reference_max") @db.VarChar(50)
+  note          String?
+  inputBy       String   @map("input_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  sample   Sample @relation(fields: [sampleId], references: [id])
+  inputter User   @relation("ResultInputBy", fields: [inputBy], references: [id])
+
+  @@map("sample_results")
+}
+
+// ============================================================
+// MODEL: SampleStatusLog
+// Append-only — tidak ada UPDATE atau DELETE
+// ============================================================
+
+model SampleStatusLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  sampleId       String        @map("sample_id") @db.Uuid
+  previousStatus SampleStatus? @map("previous_status")
+  newStatus      SampleStatus  @map("new_status")
+  changedBy      String        @map("changed_by") @db.Uuid
+  note           String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  sample        Sample @relation(fields: [sampleId], references: [id])
+  changedByUser User   @relation("StatusChangedBy", fields: [changedBy], references: [id])
+
+  @@map("sample_status_logs")
+}
+
+// ============================================================
+// MODEL: AuditLog
+// Append-only — hanya INSERT dari backend service
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ============================================================
+// MODEL: QcInstrument
+// Master alat QC per laboratorium — diisi via seed/admin
+// ============================================================
+
+model QcInstrument {
+  id           String   @id @default(uuid()) @db.Uuid
+  laboratoryId String   @map("laboratory_id") @db.Uuid
+  name         String   @db.VarChar(255)
+  serialNumber String?  @map("serial_number") @db.VarChar(100)
+  department   String?  @db.VarChar(100)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  laboratory Laboratory @relation(fields: [laboratoryId], references: [id])
+  qcRecords  QcRecord[]
+
+  @@map("qc_instruments")
+}
+
+// ============================================================
+// MODEL: QcRecord
+// Catatan QC harian per alat — append-only, oleh analis
+// Status dihitung otomatis backend: stabil / perlu_perhatian
+// ============================================================
+
+model QcRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  instrumentId String    @map("instrument_id") @db.Uuid
+  laboratoryId String    @map("laboratory_id") @db.Uuid
+  controlType  String    @map("control_type") @db.VarChar(100)
+  controlValue Decimal   @map("control_value") @db.Decimal(10, 4)
+  unit         String?   @db.VarChar(50)
+  lowerLimit   Decimal   @map("lower_limit") @db.Decimal(10, 4)
+  upperLimit   Decimal   @map("upper_limit") @db.Decimal(10, 4)
+  status       QcStatus
+  recordedBy   String    @map("recorded_by") @db.Uuid
+  notes        String?
+  recordedAt   DateTime  @map("recorded_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  instrument QcInstrument @relation(fields: [instrumentId], references: [id])
+  laboratory Laboratory   @relation(fields: [laboratoryId], references: [id])
+  recorder   User         @relation("QcRecordedBy", fields: [recordedBy], references: [id])
+
+  @@map("qc_records")
+}

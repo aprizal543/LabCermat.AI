@@ -1,0 +1,22 @@
+{
+  "name": "@labcermat/shared-types",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared TypeScript types untuk LabCermat monorepo",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"d:\\\\labcermat-production\\\\apps\\\\backend\" ; $env:TEMP = \"D:\\\\temp-labcermat\" ; $env:TMP = \"D:\\\\temp-labcermat\" ; npx tsc --noEmit 2>&1)",
+      "PowerShell(cd \"d:\\\\labcermat-production\\\\apps\\\\backend\" ; $env:TEMP = \"D:\\\\temp-labcermat\" ; $env:TMP = \"D:\\\\temp-labcermat\" ; npx tsc 2>&1)"
+    ]
+  }
+}
