@@ -36,7 +36,7 @@ jobs:
         run: cd apps/backend && pnpm run build
 
       - name: Install production dependencies
-        run: cd apps/backend && pnpm install --prod --frozen-lockfile
+        run: cd apps/backend && npm install --omit=dev --legacy-peer-deps
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
