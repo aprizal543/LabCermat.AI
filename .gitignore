@@ -104,3 +104,11 @@ mlruns/
 .mlflow/
 azureml-logs/
 azureml_cr/
+
+# LabCermat QC model
+!apps/ai-service/app/qc-anomaly-detector/model.pkl
+!apps/ai-service/app/qc-anomaly-detector/scaler.pkl
+!apps/ai-service/app/qc-anomaly-detector/label_mapping.json
+!apps/ai-service/app/qc-anomaly-detector/feature_names.json
+!apps/ai-service/app/qc-anomaly-detector/metrics.json
+!apps/ai-service/app/qc-anomaly-detector/confusion_matrix.json
