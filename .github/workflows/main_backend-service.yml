@@ -40,6 +40,9 @@ jobs:
           echo "node-linker=hoisted" > apps/backend/.npmrc
           cd apps/backend && pnpm install --no-frozen-lockfile --prod
 
+      - name: Verify node_modules
+        run: ls -la apps/backend/node_modules | head -20
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
