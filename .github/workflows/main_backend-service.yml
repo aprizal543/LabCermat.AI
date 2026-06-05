@@ -38,7 +38,7 @@ jobs:
       - name: Install production dependencies
         run: |
           echo "node-linker=hoisted" > apps/backend/.npmrc
-          cd apps/backend && pnpm install --frozen-lockfile --prod --ignore-workspace
+          cd apps/backend && pnpm install --no-frozen-lockfile --prod
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
