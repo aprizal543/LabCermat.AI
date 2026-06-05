@@ -32,7 +32,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build backend
-        run: pnpm --filter backend build
+        run: cd apps/backend && pnpm run build
+
+      - name: Install production dependencies
+        run: cd apps/backend && pnpm install --prod --frozen-lockfile
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
