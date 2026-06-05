@@ -36,7 +36,9 @@ jobs:
         run: cd apps/backend && pnpm run build
 
       - name: Install production dependencies
-        run: cd apps/backend && npm install --legacy-peer-deps
+        run: |
+          echo "node-linker=hoisted" >> .npmrc
+          pnpm install --frozen-lockfile --prod
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
