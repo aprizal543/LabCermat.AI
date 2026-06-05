@@ -39,9 +39,12 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r apps/backend/dist deploy/dist
-          cp apps/backend/package.json deploy/package.json
           cp apps/backend/prisma deploy/prisma -r
-          # generate package-lock.json for Azure npm install
+          # build shared-types and bundle as local package
+          cd packages/shared-types && pnpm run build || true && cd ../..
+          cp -r packages/shared-types deploy/shared-types
+          # replace workspace:^ with local file path
+          sed 's|"workspace:\^"|"file:./shared-types"|g' apps/backend/package.json > deploy/package.json
           cd deploy && npm install --package-lock-only --legacy-peer-deps
 
       - name: Upload artifact for deployment job
