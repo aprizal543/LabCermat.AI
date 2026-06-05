@@ -4,10 +4,10 @@ from fastapi import APIRouter
 
 from app.core.logging import logger
 from app.models.ai_models import (
-    FlagStatus,
     ResultReviewRequest,
     ResultReviewResponse,
 )
+from app.services import result_review_service
 
 router = APIRouter()
 
@@ -20,13 +20,19 @@ router = APIRouter()
 async def review_result(
     request: ResultReviewRequest,
 ) -> ResultReviewResponse:
-    logger.info("result-review called | sample_id=%s | results=%d | mode=placeholder", request.sample_id, len(request.results))
+    logger.info(
+        "result-review called | sample_id=%s | results=%d | mode=rule_based",
+        request.sample_id,
+        len(request.results),
+    )
+
+    result = result_review_service.review(request.results)
 
     return ResultReviewResponse(
         sample_id=request.sample_id,
-        flag_status=FlagStatus.normal,
-        reason="[PLACEHOLDER] Result review not yet implemented",
-        recommendation=None,
-        mode="placeholder",
+        flag_status=result.flag_status,
+        reason=result.reason,
+        recommendation=result.recommendation,
+        mode="rule_based",
         processed_at=datetime.now(timezone.utc).isoformat(),
     )

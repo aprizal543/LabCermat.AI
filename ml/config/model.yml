@@ -1,0 +1,75 @@
+# Azure ML Model Registration — QC Anomaly Detector
+#
+# Mendokumentasikan model yang sudah ter-register di Azure ML Model Registry.
+#
+# CARA REGISTER (jalankan dari Cloud Shell setelah training job Completed):
+#
+#   Opsi A — langsung dari output training job (direkomendasikan):
+#
+#     az ml model create \
+#       --name qc-anomaly-detector \
+#       --version 1 \
+#       --type custom_model \
+#       --description "Custom QC anomaly detection model trained on Azure ML synthetic dataset" \
+#       --path azureml://jobs/kind_station_vbbwfvrsff/outputs/model_dir \
+#       --resource-group rg-labcermat-ml-eastasia \
+#       --workspace-name mlw-labcermat
+#
+#   Opsi B — dari artifact hasil download ke Cloud Shell:
+#
+#     az ml model create \
+#       --name qc-anomaly-detector \
+#       --version 1 \
+#       --type custom_model \
+#       --description "Custom QC anomaly detection model trained on Azure ML synthetic dataset" \
+#       --path /home/aprizal/training-downloads/named-outputs/model_dir \
+#       --resource-group rg-labcermat-ml-eastasia \
+#       --workspace-name mlw-labcermat
+#
+# VERIFY setelah register:
+#
+#     az ml model show \
+#       --name qc-anomaly-detector \
+#       --version 1 \
+#       --resource-group rg-labcermat-ml-eastasia \
+#       --workspace-name mlw-labcermat
+#
+# LIST semua versi:
+#
+#     az ml model list \
+#       --name qc-anomaly-detector \
+#       --resource-group rg-labcermat-ml-eastasia \
+#       --workspace-name mlw-labcermat
+#
+# CATATAN:
+#   - File model artifact (.pkl, .json) tidak boleh di-commit ke repository.
+#   - *.pkl dan ml/outputs/ sudah masuk .gitignore.
+#   - Model di-refer dari deployment.yml menggunakan:
+#     azureml:qc-anomaly-detector:1
+#   - Versi baru dapat diregister dengan --version 2, dst.
+
+$schema: https://azuremlschemas.azureedge.net/latest/model.schema.json
+
+name: qc-anomaly-detector
+version: "1"
+type: custom_model
+description: >
+  Custom QC anomaly detection model for LabCermat Sprint 7 hackathon.
+  Trained on synthetic QC dataset (qc-anomaly-synthetic:1, 10 000 rows).
+  Random Forest Classifier with StandardScaler preprocessing.
+  Labels: 0=stabil, 1=perlu_perhatian, 2=potensi_drift.
+  Training job: kind_station_vbbwfvrsff.
+  Metrics (test split): accuracy=1.0000, macro_f1=1.0000.
+  NOTE: High score expected on synthetic data — requires validation with real QC data before production use.
+
+# path diisi via --path flag saat az ml model create.
+# Jangan hardcode path lokal Cloud Shell di sini karena artifact tidak di-commit.
+# path: <diisi via --path flag>
+
+# Artifacts yang dihasilkan training job kind_station_vbbwfvrsff:
+#   model.pkl            Random Forest pipeline (scaler + classifier)
+#   scaler.pkl           StandardScaler standalone
+#   feature_names.json   Urutan 16 input features
+#   label_mapping.json   {0: stabil, 1: perlu_perhatian, 2: potensi_drift}
+#   metrics.json         Full evaluation metrics
+#   confusion_matrix.json Confusion matrix test split

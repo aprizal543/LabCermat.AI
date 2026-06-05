@@ -4,6 +4,7 @@ import { QcStatus } from '@labcermat/shared-types';
 import { useQcRecords, useQcInstruments } from '@/hooks/useQc';
 import type { GetQcRecordsQuery } from '@/hooks/useQc';
 import { QcStatusBadge } from './QcStatusBadge';
+import { AiAnomalyBadge } from '@/components/ai/AiAnomalyBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -186,6 +187,7 @@ export function QcTable() {
                   <th className="px-4 py-3">Nilai</th>
                   <th className="hidden px-4 py-3 md:table-cell">Rentang</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="hidden px-4 py-3 md:table-cell">AI</th>
                   <th className="hidden px-4 py-3 sm:table-cell">Waktu</th>
                   <th className="hidden px-4 py-3 lg:table-cell">Dicatat oleh</th>
                 </tr>
@@ -214,6 +216,9 @@ export function QcTable() {
                     </td>
                     <td className="px-4 py-3">
                       <QcStatusBadge status={r.status} />
+                    </td>
+                    <td className="hidden px-4 py-3 md:table-cell">
+                      <AiAnomalyBadge recordId={r.id} />
                     </td>
                     <td className="hidden px-4 py-3 text-xs text-slate-400 sm:table-cell">
                       {formatDateTime(r.recordedAt)}

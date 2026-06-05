@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,10 +10,16 @@ import { SampleStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/decorators/current-user.decorator';
 import { CreateResultDto } from './dto/create-result.dto';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class ResultsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ResultsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService,
+  ) {}
 
   private async resolveUser(currentUser: RequestUser) {
     const user = await this.prisma.user.findUnique({
@@ -97,7 +104,17 @@ export class ResultsService {
       return created;
     });
 
+    // Fire-and-forget AI review — tidak memblokir response
+    this.triggerAiReview(sampleId, currentUser);
+
     return { data: result, message: 'Hasil pemeriksaan berhasil ditambahkan' };
+  }
+
+  private triggerAiReview(sampleId: string, currentUser: RequestUser): void {
+    this.aiService.reviewResult(sampleId, currentUser).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`AI review trigger gagal | sampleId=${sampleId} | ${msg}`);
+    });
   }
 
   async findBySample(sampleId: string, currentUser: RequestUser) {

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -10,10 +11,16 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RequestUser } from '../../common/decorators/current-user.decorator';
 import { CreateQcRecordDto } from './dto/create-qc-record.dto';
 import { GetQcRecordsQueryDto } from './dto/get-qc-records-query.dto';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class QcService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(QcService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiService,
+  ) {}
 
   private async resolveUser(currentUser: RequestUser) {
     const user = await this.prisma.user.findUnique({
@@ -124,7 +131,17 @@ export class QcService {
       return record;
     });
 
+    // Fire-and-forget AI anomaly detection — tidak memblokir response
+    this.triggerAiAnomaly(result.id, currentUser);
+
     return { data: result, message: 'Catatan QC berhasil disimpan' };
+  }
+
+  private triggerAiAnomaly(recordId: string, currentUser: RequestUser): void {
+    this.aiService.detectQcAnomaly(recordId, currentUser).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`AI QC anomaly trigger gagal | recordId=${recordId} | ${msg}`);
+    });
   }
 
   async findAll(query: GetQcRecordsQueryDto, currentUser: RequestUser) {

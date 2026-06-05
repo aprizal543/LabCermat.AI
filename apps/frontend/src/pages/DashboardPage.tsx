@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   AlertCircle,
@@ -12,78 +11,16 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
 import { SampleStatus } from '@labcermat/shared-types';
-import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnalysisDashboard, useSupervisorDashboard } from '@/hooks/useDashboard';
 import { useUpdateSampleStatus } from '@/hooks/useSamples';
 import { PriorityBadge } from '@/components/samples/PriorityBadge';
-import { Badge } from '@/components/ui/badge';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
-// ─── Health query ──────────────────────────────────────────────
-
-interface HealthResponse {
-  status: 'ok' | 'error';
-  service: string;
-  version: string;
-  timestamp: string;
-  database: 'connected' | 'disconnected';
-}
-
-function useHealth() {
-  return useQuery<HealthResponse>({
-    queryKey: ['health'],
-    queryFn: async () => {
-      const res = await apiClient.get<HealthResponse>('/health');
-      return res.data;
-    },
-    refetchInterval: 30_000,
-  });
-}
-
-// ─── System status bar ─────────────────────────────────────────
-
-function SystemStatusBar() {
-  const { data: health, isLoading, isError } = useHealth();
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white px-4 py-2.5">
-      {isLoading && <Loader2 size={13} className="animate-spin text-slate-400" />}
-      {isError && (
-        <div className="flex items-center gap-1.5 text-xs text-red-500">
-          <WifiOff size={13} />
-          <span>Backend tidak terjangkau</span>
-        </div>
-      )}
-      {health && (
-        <div className="flex items-center gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-1.5">
-            <Wifi size={13} className="text-teal-500" />
-            <span>Backend</span>
-            <Badge variant={health.status === 'ok' ? 'success' : 'destructive'} className="py-0 text-[10px]">
-              {health.status === 'ok' ? 'Online' : 'Error'}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Activity size={13} className="text-teal-500" />
-            <span>Database</span>
-            <Badge variant={health.database === 'connected' ? 'success' : 'destructive'} className="py-0 text-[10px]">
-              {health.database === 'connected' ? 'Terhubung' : 'Terputus'}
-            </Badge>
-          </div>
-          <span className="text-slate-300">·</span>
-          <span className="text-[11px] text-slate-400">
-            {new Date(health.timestamp).toLocaleTimeString('id-ID')}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
+import { AiPriorityPanel } from '@/components/ai/AiPriorityPanel';
+import { AiSummaryCard } from '@/components/ai/AiSummaryCard';
 
 // ─── Stat card ─────────────────────────────────────────────────
 
@@ -138,8 +75,6 @@ function DashboardAnalis() {
         <h2 className="text-lg font-semibold text-slate-800">Dashboard</h2>
         <p className="text-sm text-slate-500">Ringkasan operasional harian Anda</p>
       </div>
-
-      <SystemStatusBar />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -299,6 +234,8 @@ function DashboardAnalis() {
           )}
         </CardContent>
       </Card>
+
+      <AiPriorityPanel />
     </div>
   );
 }
@@ -398,8 +335,6 @@ function DashboardSupervisor() {
         <h2 className="text-lg font-semibold text-slate-800">Dashboard Supervisor</h2>
         <p className="text-sm text-slate-500">Fokus review dan validasi hasil pemeriksaan</p>
       </div>
-
-      <SystemStatusBar />
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -515,34 +450,7 @@ function DashboardSupervisor() {
         </button>
       )}
 
-      {/* Ringkasan Supervisor — Sprint 6 placeholder */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Ringkasan Supervisor</CardTitle>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-400">
-              Tersedia Sprint 6
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
-            <p className="text-xs text-slate-400">
-              Ringkasan AI akan tersedia setelah workflow sampel diimplementasikan
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Sprint info */}
-      <Card className="border-dashed border-slate-200 bg-slate-50">
-        <CardContent className="p-4">
-          <p className="text-xs font-semibold text-slate-500">Sprint 4 — Result Input & Supervisor Review</p>
-          <p className="mt-1 text-xs text-slate-400">
-            Validasi dan cek ulang aktif. Gunakan tombol di daftar atau buka halaman detail sampel.
-          </p>
-        </CardContent>
-      </Card>
+      <AiSummaryCard />
     </div>
   );
 }

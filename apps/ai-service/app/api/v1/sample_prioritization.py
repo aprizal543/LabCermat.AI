@@ -4,10 +4,10 @@ from fastapi import APIRouter
 
 from app.core.logging import logger
 from app.models.ai_models import (
-    RankedSample,
     SamplePrioritizationRequest,
     SamplePrioritizationResponse,
 )
+from app.services import prioritization_service
 
 router = APIRouter()
 
@@ -20,21 +20,15 @@ router = APIRouter()
 async def prioritize_samples(
     request: SamplePrioritizationRequest,
 ) -> SamplePrioritizationResponse:
-    logger.info("sample-prioritization called | samples=%d | mode=placeholder", len(request.samples))
+    logger.info(
+        "sample-prioritization called | samples=%d | mode=rule_based",
+        len(request.samples),
+    )
 
-    ranked = [
-        RankedSample(
-            id=sample.id,
-            rank=idx + 1,
-            score=0.0,
-            reason="[PLACEHOLDER] Prioritization not yet implemented",
-            estimated_duration_minutes=None,
-        )
-        for idx, sample in enumerate(request.samples)
-    ]
+    ranked = prioritization_service.prioritize(request.samples)
 
     return SamplePrioritizationResponse(
         ranked_samples=ranked,
-        mode="placeholder",
+        mode="rule_based",
         processed_at=datetime.now(timezone.utc).isoformat(),
     )

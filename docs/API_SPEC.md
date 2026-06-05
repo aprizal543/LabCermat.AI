@@ -1,7 +1,7 @@
 # LabCermat — API Specification
 
-**Versi:** 5.0 — Sprint 5  
-**Status:** QC Harian Digital & Audit Log aktif
+**Versi:** 8.1 — Sprint 8 Langkah 6  
+**Status:** Azure ML Artifact Inference aktif (QC Anomaly)
 
 ---
 
@@ -19,7 +19,8 @@
   - [Audit Logs](#audit-logs)
 - [AI Service — localhost:8000](#ai-service--localhost8000)
   - [Health](#health-1)
-  - [AI Endpoints (Placeholder)](#ai-endpoints-placeholder)
+  - [AI Endpoints (Rule-Based)](#ai-endpoints-rule-based)
+- [Backend API — AI Gateway](#backend-api--ai-gateway)
 - [Error Response Format](#error-response-format)
 
 ---
@@ -793,7 +794,13 @@ Riwayat aktivitas sistem. Scoping per role:
 
 ## AI Service — localhost:8000
 
-AI Service berjalan di port 8000, **terpisah** dari Backend. Semua endpoint AI mengembalikan `"mode": "placeholder"` — logic AI real diimplementasikan di Sprint 6+.
+AI Service berjalan di port 8000, **terpisah** dari Backend. Semua endpoint dipanggil oleh Backend (bukan langsung dari Frontend).
+
+Mode aktif dikontrol via env var `AI_MODE`:
+- `rule_based` — rule-based logic Sprint 6 (default)
+- `azure_ml_artifact` — in-process inference menggunakan artifact dari Azure ML Model Registry
+
+> **Catatan:** Endpoint AI Service **tidak menerima Authorization header** — dipanggil server-to-server oleh Backend.
 
 ---
 
@@ -805,21 +812,33 @@ Cek status AI Service.
 
 **Auth:** Tidak diperlukan
 
-**Response 200:**
+**Response 200 (`AI_MODE=rule_based`):**
 
 ```json
 {
   "status": "ok",
   "service": "labcermat-ai-service",
   "version": "1.0.0",
-  "mode": "placeholder",
-  "timestamp": "2026-05-12T06:00:00.000Z"
+  "mode": "rule_based",
+  "timestamp": "2026-05-13T06:00:00.000Z"
+}
+```
+
+**Response 200 (`AI_MODE=azure_ml_artifact`):**
+
+```json
+{
+  "status": "ok",
+  "service": "labcermat-ai-service",
+  "version": "1.0.0",
+  "mode": "azure_ml_artifact",
+  "timestamp": "2026-05-13T06:00:00.000Z"
 }
 ```
 
 ---
 
-### AI Endpoints (Placeholder)
+### AI Endpoints
 
 Semua AI endpoint menggunakan prefix `/ai/v1`.
 
@@ -827,7 +846,7 @@ Semua AI endpoint menggunakan prefix `/ai/v1`.
 
 #### `POST /ai/v1/sample-prioritization`
 
-Rekomendasi urutan prioritas pemrosesan sampel.
+Hitung skor prioritas sampel aktif menggunakan rule-based scoring.
 
 **Request Body:**
 
@@ -835,14 +854,15 @@ Rekomendasi urutan prioritas pemrosesan sampel.
 {
   "samples": [
     {
-      "sample_id": "uuid-string",
-      "sample_code": "LAB-20260512-0001",
+      "id": "uuid-string",
+      "sample_code": "LAB-20260513-0001",
       "priority": "cito",
-      "test_types": ["hematologi"],
-      "registered_at": "2026-05-12T06:00:00.000Z"
+      "status": "dalam_proses",
+      "requested_test": "Hematologi Lengkap",
+      "received_at": "2026-05-13T06:00:00.000Z",
+      "minta_cek_ulang": false
     }
-  ],
-  "laboratory_id": "uuid-string"
+  ]
 }
 ```
 
@@ -850,33 +870,45 @@ Rekomendasi urutan prioritas pemrosesan sampel.
 
 ```json
 {
-  "mode": "placeholder",
-  "recommended_order": ["uuid-string"],
-  "reasoning": "Placeholder — rule-based prioritization akan diimplementasikan Sprint 6"
+  "mode": "rule_based",
+  "ranked_samples": [
+    {
+      "id": "uuid-string",
+      "rank": 1,
+      "score": 140,
+      "reason": "CITO · Hematologi Lengkap · 3 jam lalu",
+      "estimated_duration_minutes": 30
+    }
+  ],
+  "processed_at": "2026-05-13T09:00:00.000Z"
 }
 ```
+
+**Scoring rules:**
+- Base priority: `cito` = 100, `urgent` = 60, `rutin` = 20
+- Age bonus: +2 per jam sejak `received_at`, maks +40
+- Recheck bonus: +20 jika `minta_cek_ulang = true`
 
 ---
 
 #### `POST /ai/v1/result-review`
 
-Review otomatis hasil pemeriksaan laboratorium.
+Flag hasil pemeriksaan berdasarkan rentang rujukan.
 
 **Request Body:**
 
 ```json
 {
   "sample_id": "uuid-string",
-  "test_type": "hematologi",
-  "results": {
-    "hemoglobin": 12.5,
-    "hematokrit": 38.0,
-    "leukosit": 8500
-  },
-  "patient_info": {
-    "age": 35,
-    "gender": "L"
-  }
+  "results": [
+    {
+      "parameter_name": "Hemoglobin",
+      "value": "7.2",
+      "unit": "g/dL",
+      "reference_min": "12.0",
+      "reference_max": "16.0"
+    }
+  ]
 }
 ```
 
@@ -884,57 +916,136 @@ Review otomatis hasil pemeriksaan laboratorium.
 
 ```json
 {
-  "mode": "placeholder",
-  "flagged": false,
-  "flags": [],
-  "recommendation": "Placeholder — AI review akan diimplementasikan Sprint 6",
-  "confidence": 0.0
+  "mode": "rule_based",
+  "flag_status": "perlu_review_supervisor",
+  "reason": "Hemoglobin sangat di bawah batas bawah (7.2 vs min 12.0)",
+  "recommendation": "Hasil memerlukan review supervisor sebelum dilaporkan",
+  "processed_at": "2026-05-13T09:00:00.000Z"
 }
 ```
+
+**Nilai `flag_status`:**
+
+| Nilai | Kondisi |
+|---|---|
+| `normal` | Semua nilai dalam rentang rujukan atau non-numerik |
+| `perlu_perhatian` | ≥1 nilai di luar rentang rujukan |
+| `perlu_review_supervisor` | ≥2 nilai di luar rentang, ATAU 1 nilai ekstrem (>2× ref_max atau <0.5× ref_min untuk ref_min positif) |
 
 ---
 
 #### `POST /ai/v1/qc-anomaly`
 
-Deteksi anomali pada data Quality Control.
+Deteksi anomali QC. Mode inference tergantung `AI_MODE` env var:
+- `rule_based` — Westgard T4 full-series monotonic trend detection
+- `azure_ml_artifact` — Random Forest classifier dari Azure ML Model Registry
 
 **Request Body:**
 
 ```json
 {
-  "laboratory_id": "uuid-string",
-  "qc_date": "2026-05-12",
-  "control_level": "level_1",
-  "measurements": {
-    "hemoglobin": [12.1, 12.3, 12.0, 12.4]
-  }
+  "instrument_id": "uuid-string",
+  "control_type": "Level 1",
+  "control_value": 12.8,
+  "lower_limit": 11.0,
+  "upper_limit": 13.0,
+  "unit": "g/dL",
+  "history": [
+    { "value": 11.5, "recorded_at": "2026-05-12T..." },
+    { "value": 11.8, "recorded_at": "2026-05-12T..." },
+    { "value": 12.1, "recorded_at": "2026-05-13T..." }
+  ]
 }
 ```
 
-**Response 200:**
+**Response 200 (`mode=rule_based`):**
 
 ```json
 {
-  "mode": "placeholder",
-  "anomaly_detected": false,
-  "anomalies": [],
-  "summary": "Placeholder — anomaly detection akan diimplementasikan Sprint 6"
+  "status": "potensi_drift",
+  "reason": "Tren naik terdeteksi pada 4 titik data berturut-turut",
+  "suggestion": null,
+  "mode": "rule_based",
+  "processed_at": "2026-05-13T09:00:00.000Z",
+  "confidence": null,
+  "probabilities": null,
+  "model_version": null,
+  "fallback_reason": null
 }
 ```
+
+**Response 200 (`mode=azure_ml_artifact`):**
+
+```json
+{
+  "status": "potensi_drift",
+  "reason": "Model Azure ML mendeteksi potensi drift pada data QC — pertimbangkan kalibrasi alat.",
+  "suggestion": "Lakukan pengecekan kalibrasi alat. Konsultasikan dengan supervisor.",
+  "mode": "azure_ml_artifact",
+  "processed_at": "2026-05-13T09:00:00.000Z",
+  "confidence": 0.9312,
+  "probabilities": {
+    "stabil": 0.0401,
+    "perlu_perhatian": 0.0287,
+    "potensi_drift": 0.9312
+  },
+  "model_version": "qc-anomaly-detector:1",
+  "fallback_reason": null
+}
+```
+
+**Response 200 (`mode=fallback_rule_based` — artifact error):**
+
+```json
+{
+  "status": "stabil",
+  "reason": "Nilai dalam batas kontrol, tidak ada tren signifikan.",
+  "suggestion": null,
+  "mode": "fallback_rule_based",
+  "processed_at": "2026-05-13T09:00:00.000Z",
+  "confidence": null,
+  "probabilities": null,
+  "model_version": null,
+  "fallback_reason": "azure_ml_artifact_unavailable: AZURE_ML_MODEL_DIR not set or directory does not exist"
+}
+```
+
+**Nilai `status`:**
+
+| Nilai | Kondisi |
+|---|---|
+| `stabil` | Nilai dalam batas dan tidak ada anomali terdeteksi |
+| `perlu_perhatian` | Nilai di luar batas kontrol — perlu pengecekan alat |
+| `potensi_drift` | Tren naik/turun terdeteksi — alat mungkin perlu kalibrasi |
+
+**Nilai `mode`:**
+
+| Nilai | Keterangan |
+|---|---|
+| `azure_ml_artifact` | Inference berhasil dari Azure ML artifact |
+| `fallback_rule_based` | Azure ML artifact tidak tersedia; digunakan rule-based |
+| `rule_based` | `AI_MODE=rule_based` — rule-based dipilih eksplisit |
+
+> `potensi_drift` adalah output AI saja — tidak disimpan ke enum `QcStatus` di database. Disimpan di `ai_analysis_logs.response_data`.  
+> Output ini adalah **decision support workflow operasional**, bukan diagnosis medis.
 
 ---
 
 #### `POST /ai/v1/supervisor-summary`
 
-Ringkasan harian untuk supervisor.
+Ringkasan shift supervisor berbasis template.
 
 **Request Body:**
 
 ```json
 {
   "laboratory_id": "uuid-string",
-  "date": "2026-05-12",
-  "include_sections": ["sample_stats", "qc_summary", "pending_reviews"]
+  "shift_hours": 8,
+  "total_samples": 12,
+  "validated_count": 8,
+  "recheck_count": 2,
+  "qc_issues_count": 1,
+  "analis_list": ["Rina Analis", "Budi Analis"]
 }
 ```
 
@@ -942,16 +1053,345 @@ Ringkasan harian untuk supervisor.
 
 ```json
 {
-  "mode": "placeholder",
-  "date": "2026-05-12",
-  "summary": {
-    "sample_stats": "Placeholder",
-    "qc_summary": "Placeholder",
-    "pending_reviews": "Placeholder"
+  "mode": "rule_based",
+  "summary": "Dalam 8 jam terakhir, Lab Klinik Utama memproses 12 sampel. 8 sampel telah divalidasi (67%). Terdapat 2 sampel yang perlu cek ulang dan 1 masalah QC yang perlu ditangani.",
+  "stats": {
+    "total_samples": 12,
+    "validated": 8,
+    "recheck": 2,
+    "qc_issues": 1,
+    "validation_rate": 0.67,
+    "analis_bertugas": ["Rina Analis", "Budi Analis"]
   },
-  "generated_at": "2026-05-12T06:00:00.000Z"
+  "focus_recommendations": [
+    "Selesaikan 2 sampel yang menunggu cek ulang",
+    "Tindak lanjuti 1 masalah QC yang terdeteksi"
+  ],
+  "processed_at": "2026-05-13T09:00:00.000Z"
 }
 ```
+
+---
+
+## Backend API — AI Gateway
+
+Endpoint AI di Backend (`/api/v1/ai/*`) bertindak sebagai gateway: mengambil data dari database, memanggil AI Service, dan menyimpan log ke `ai_analysis_logs`.
+
+**Auth:** Bearer JWT (AuthGuard) untuk semua endpoint di bawah.
+
+---
+
+#### `POST /api/v1/ai/prioritize`
+
+Trigger prioritasi sampel aktif.
+
+**Auth:** analis dan supervisor
+
+**Response 200:**
+
+```json
+{
+  "data": {
+    "mode": "rule_based",
+    "ranked_samples": [ ... ],
+    "processed_at": "2026-05-13T09:00:00.000Z"
+  }
+}
+```
+
+Log disimpan ke `ai_analysis_logs` dengan `analysis_type = sample_prioritization`, `entity_type = laboratory`.
+
+---
+
+#### `POST /api/v1/ai/review/:sampleId`
+
+Trigger review hasil pemeriksaan satu sampel.
+
+**Auth:** analis dan supervisor
+
+**Path Parameters:** `sampleId` — UUID sampel
+
+**Response 200:** respons AI service mentah
+
+Log disimpan ke `ai_analysis_logs` dengan `analysis_type = result_review`, `entity_type = sample`, `entity_id = sampleId`.
+
+---
+
+#### `POST /api/v1/ai/qc-anomaly/:recordId`
+
+Trigger deteksi anomali QC satu record.
+
+**Auth:** analis dan supervisor
+
+**Path Parameters:** `recordId` — UUID QC record
+
+**Response 200:** respons AI service mentah
+
+Log disimpan ke `ai_analysis_logs` dengan `analysis_type = qc_anomaly`, `entity_type = qc_record`, `entity_id = recordId`.
+
+---
+
+#### `POST /api/v1/ai/supervisor-summary`
+
+Trigger ringkasan shift supervisor.
+
+**Auth:** supervisor saja (analis → 403)
+
+**Request Body (opsional):**
+
+```json
+{ "shiftHours": 8 }
+```
+
+| Field | Tipe | Default | Keterangan |
+|---|---|---|---|
+| `shiftHours` | integer | 8 | Window waktu ringkasan (1–24 jam) |
+
+**Response 200:** respons AI service mentah
+
+Log disimpan ke `ai_analysis_logs` dengan `analysis_type = supervisor_summary`, `entity_type = laboratory`.
+
+---
+
+#### `POST /api/v1/ai/sop-question`
+
+Tanya jawab SOP laboratorium berbasis BM25 retrieval + template answer.
+
+**Auth:** analis dan supervisor
+
+**Request Body:**
+
+```json
+{
+  "question": "Apa yang dilakukan jika QC di luar batas?",
+  "topK": 5,
+  "documentId": null
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|---|---|---|---|
+| `question` | string | Ya | 3–500 karakter |
+| `topK` | integer | Tidak | Default 5, range 1–10. Jumlah chunk SOP yang diambil |
+| `documentId` | string | Tidak | Filter ke satu dokumen SOP tertentu (document_id di index) |
+
+**Response 200:**
+
+```json
+{
+  "data": {
+    "answer": "Berdasarkan SOP yang tersedia, berikut informasi yang relevan dengan pertanyaan: \"Apa yang dilakukan jika QC di luar batas?\":\n\n1. Prosedur Penanganan QC Di Luar Batas. Apabila nilai QC berada di luar batas kontrol, analis wajib menghentikan pemeriksaan sampel... (SOP: SOP Penanganan QC Di Luar Batas, hal. 1)\n\nUntuk tindakan lebih lanjut, rujuk langsung ke dokumen SOP terkait atau konsultasikan dengan supervisor laboratorium.",
+    "sources": [
+      {
+        "document_id": "sop-hematologi-001",
+        "title": "SOP Penanganan QC Di Luar Batas",
+        "section": "page_1",
+        "source_page": 1,
+        "chunk_index": 0,
+        "score": 7.3698,
+        "snippet": "Prosedur Penanganan QC Di Luar Batas. Apabila nilai QC berada di luar batas kontrol..."
+      }
+    ],
+    "mode": "template_bm25",
+    "safety_note": "Output ini adalah bantuan operasional workflow laboratorium, bukan diagnosis medis. Keputusan klinis tetap sepenuhnya berada di tangan tenaga medis yang berwenang.",
+    "fallback_reason": null,
+    "processed_at": "2026-05-20T10:00:00+00:00"
+  },
+  "message": "SOP question berhasil dijawab"
+}
+```
+
+**Mode values:**
+
+| Mode | Keterangan |
+|---|---|
+| `groq_llm` | Groq LLaMA menjawab berdasarkan chunks yang diretrieval |
+| `template_bm25` | Template BM25 digunakan (AI_GENERATIVE_PROVIDER != groq) |
+| `fallback_template_bm25` | Groq dipilih tetapi gagal/timeout — template BM25 dipakai sebagai fallback |
+| `no_relevant_source` | Tidak ada hasil retrieval — kata kunci tidak cocok atau SOP belum diindeks |
+| `search_unavailable` | Azure AI Search tidak dikonfigurasi di AI Service |
+| `search_error` | Error saat memanggil Azure AI Search |
+| `validation_error` | Pertanyaan kosong atau tidak valid |
+
+> **Safety:** Response selalu menyertakan `safety_note`. Tidak ada diagnosis medis — output adalah bantuan operasional workflow laboratorium.
+
+Log disimpan ke `ai_analysis_logs` dengan `analysis_type = sop_question`, `entity_type = laboratory`, `entity_id = laboratoryId`.
+
+---
+
+### SOP Documents
+
+#### `POST /api/v1/sop-documents/upload`
+
+Upload PDF SOP, parse via Azure Document Intelligence, index ke Azure AI Search.
+
+**Auth:** analis dan supervisor  
+**Content-Type:** `multipart/form-data`
+
+**Form Fields:**
+
+| Field | Tipe | Wajib | Keterangan |
+|---|---|---|---|
+| `file` | File (PDF) | Ya | Maks. 5 MB |
+| `title` | string | Tidak | Judul dokumen. Default: nama file tanpa `.pdf` |
+
+**Response 200:**
+
+```json
+{
+  "data": {
+    "id": "uuid",
+    "title": "SOP Penanganan QC",
+    "originalFilename": "sop-qc-v2.pdf",
+    "mimeType": "application/pdf",
+    "sizeBytes": 102400,
+    "status": "indexed",
+    "chunkCount": 24,
+    "errorMessage": null,
+    "uploadedById": "uuid",
+    "indexedAt": "2026-05-20T10:00:00.000Z",
+    "createdAt": "2026-05-20T10:00:00.000Z",
+    "updatedAt": "2026-05-20T10:00:00.000Z",
+    "uploadedBy": { "fullName": "Budi Analis" }
+  },
+  "message": "Dokumen SOP berhasil diparse dan diindeks"
+}
+```
+
+Status lifecycle: `pending` → `indexed` (sukses) / `failed` (error)
+
+**Response 503:** jika AI Service gagal parse/index — status dokumen di DB diset ke `failed`
+
+---
+
+#### `GET /api/v1/sop-documents`
+
+List semua dokumen SOP milik laboratorium current user.
+
+**Auth:** analis dan supervisor
+
+**Response 200:**
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "SOP Penanganan QC",
+      "originalFilename": "sop-qc-v2.pdf",
+      "status": "indexed",
+      "chunkCount": 24,
+      "errorMessage": null,
+      "sizeBytes": 102400,
+      "indexedAt": "2026-05-20T10:00:00.000Z",
+      "createdAt": "2026-05-20T10:00:00.000Z",
+      "uploadedBy": { "fullName": "Budi Analis" }
+    }
+  ]
+}
+```
+
+---
+
+#### `DELETE /api/v1/sop-documents/:id`
+
+Hapus metadata dokumen dan index chunks-nya dari Azure AI Search.
+
+**Auth:** analis dan supervisor  
+**Path:** `id` — UUID SopDocument
+
+**Response 200:**
+
+```json
+{ "message": "Dokumen SOP berhasil dihapus" }
+```
+
+> Index delete di AI Service bersifat best-effort. Jika gagal, metadata tetap dihapus dari DB dan error hanya di-log.
+
+---
+
+### AI Service Internal Endpoints (Sprint 8)
+
+#### `POST /ai/v1/sop-documents/parse-index`
+
+Parse PDF + index ke Azure AI Search. Dipanggil oleh backend saat upload.
+
+**Content-Type:** `multipart/form-data`
+
+| Field | Tipe | Keterangan |
+|---|---|---|
+| `document_id` | string | UUID SopDocument dari backend DB |
+| `title` | string | Judul dokumen |
+| `file` | File (PDF) | File bytes |
+
+**Response 200:**
+
+```json
+{
+  "document_id": "uuid",
+  "title": "SOP Penanganan QC",
+  "status": "indexed",
+  "chunk_count": 24,
+  "pages_count": 8,
+  "tables_count": 3,
+  "indexed_count": 24,
+  "processed_at": "2026-05-20T10:00:00+00:00"
+}
+```
+
+#### `DELETE /ai/v1/sop-documents/{document_id}/index`
+
+Hapus semua chunks untuk satu `document_id` dari Azure AI Search.
+
+**Response 200:**
+
+```json
+{ "document_id": "uuid", "deleted": 24, "status": "deleted" }
+```
+
+---
+
+#### `GET /api/v1/ai/logs/:entityId`
+
+Ambil log AI terakhir untuk satu entitas.
+
+**Auth:** analis dan supervisor
+
+**Path Parameters:** `entityId` — UUID entitas (sample ID, QC record ID, atau laboratory ID)
+
+**Query Parameters:**
+
+| Parameter | Tipe | Keterangan |
+|---|---|---|
+| `type` | string | Filter `analysis_type` (contoh: `qc_anomaly`, `result_review`) |
+
+**Response 200:**
+
+```json
+{
+  "data": {
+    "id": "uuid",
+    "analysisType": "qc_anomaly",
+    "entityType": "qc_record",
+    "entityId": "uuid",
+    "responseData": {
+      "status": "stabil",
+      "reason": "Nilai QC terlihat stabil berdasarkan model Azure ML.",
+      "suggestion": "Tidak diperlukan tindakan segera. Lanjutkan pemantauan rutin.",
+      "mode": "azure_ml_artifact",
+      "processed_at": "2026-05-13T09:00:00.000Z",
+      "confidence": 0.9847,
+      "probabilities": { "stabil": 0.9847, "perlu_perhatian": 0.0103, "potensi_drift": 0.005 },
+      "model_version": "qc-anomaly-detector:1",
+      "fallback_reason": null
+    },
+    "mode": "azure_ml_artifact",
+    "createdAt": "2026-05-13T09:00:00.000Z"
+  }
+}
+```
+
+**Response 404:** jika belum ada log untuk entitas tersebut (normal — bukan error kritis)
 
 ---
 
@@ -983,6 +1423,7 @@ Semua error dari Backend menggunakan format standar berikut:
 |---|---|
 | 400 | Validasi request body gagal |
 | 401 | Header `Authorization` tidak ada |
-| 403 | User tidak punya akses (Sprint 2) |
+| 403 | User tidak punya akses |
 | 404 | Resource tidak ditemukan |
 | 500 | Error server tidak terduga |
+| 503 | AI Service tidak dapat dihubungi (timeout atau down) |

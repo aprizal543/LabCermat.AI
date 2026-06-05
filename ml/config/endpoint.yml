@@ -1,0 +1,41 @@
+# Azure ML Managed Online Endpoint — QC Anomaly Detector
+#
+# CREATE endpoint (run BEFORE deployment.yml):
+#
+#   az ml online-endpoint create \
+#     --file ml/config/endpoint.yml \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# CHECK status:
+#
+#   az ml online-endpoint show \
+#     --name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# GET keys (for AZURE_ML_ENDPOINT_KEY in .env):
+#
+#   az ml online-endpoint get-credentials \
+#     --name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# DELETE endpoint when not in use (saves credit):
+#
+#   az ml online-endpoint delete \
+#     --name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat \
+#     --yes
+
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+
+name: ep-qc-anomaly
+description: >
+  Managed Online Endpoint for QC Anomaly Detection model (LabCermat Sprint 7).
+  Accepts QC measurement features and returns stabil/perlu_perhatian/potensi_drift
+  classification with confidence score. Decision support only — not a medical diagnosis tool.
+
+# Key-based auth: the primary key is set as AZURE_ML_ENDPOINT_KEY in AI service .env
+auth_mode: key

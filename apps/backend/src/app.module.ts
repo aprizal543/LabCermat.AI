@@ -11,6 +11,8 @@ import { ResultsModule } from './modules/results/results.module';
 import { QcInstrumentsModule } from './modules/qc-instruments/qc-instruments.module';
 import { QcModule } from './modules/qc/qc.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AiModule } from './modules/ai/ai.module';
+import { SopDocumentsModule } from './modules/sop-documents/sop-documents.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
     QcInstrumentsModule,
     QcModule,
     AuditLogsModule,
+    AiModule,
+    SopDocumentsModule,
   ],
 })
 export class AppModule {}

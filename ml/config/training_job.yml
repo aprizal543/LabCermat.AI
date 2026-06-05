@@ -1,0 +1,74 @@
+# Azure ML Command Job — QC Anomaly Detection Training
+#
+# Submit:
+#   az ml job create \
+#     --file ml/config/training_job.yml \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# Monitor:
+#   az ml job show \
+#     --name <run-id> \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# Stream logs live:
+#   az ml job stream \
+#     --name <run-id> \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# Download artifacts after Completed:
+#   az ml job download \
+#     --name <run-id> \
+#     --outputs \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# IMPORTANT: Training final wajib berjalan di Azure ML Compute Cluster.
+# Jangan submit training job dari laptop lokal untuk dataset penuh.
+# Gunakan --smoke-test flag hanya untuk verifikasi syntax lokal.
+
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+type: command
+
+display_name: qc-anomaly-train-v1
+description: >
+  Train QC Anomaly Detection model (Random Forest + Logistic Regression baseline)
+  on synthetic dataset qc-anomaly-synthetic:1.
+  Outputs: model.pkl, scaler.pkl, feature_names.json, label_mapping.json,
+  metrics.json, confusion_matrix.json.
+
+compute: azureml:cpu-cluster-dev
+
+# Curated environment: Python 3.10 + scikit-learn 1.5 + pandas.
+# No custom Docker image needed — keeps cost and build time low.
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+
+# Source code: the train/ sub-folder is uploaded as the job snapshot.
+code: ../train
+
+# Input: the registered Data Asset from Langkah 3.
+inputs:
+  dataset:
+    type: uri_file
+    path: azureml:qc-anomaly-synthetic:1
+    mode: ro_mount        # read-only mount — no copy, saves time
+
+# Output: model artifacts written to Azure ML default datastore.
+outputs:
+  model_dir:
+    type: uri_folder
+    mode: rw_mount
+
+command: >-
+  python train.py
+  --data ${{inputs.dataset}}
+  --output-dir ${{outputs.model_dir}}
+  --random-state 42
+
+# Resource limits — Standard_DS2_v2 is sufficient for Random Forest on 10k rows.
+# Training should complete in under 5 minutes.
+resources:
+  instance_count: 1

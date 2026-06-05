@@ -1,0 +1,18 @@
+[
+  "control_value",
+  "lower_limit",
+  "upper_limit",
+  "mean_limit",
+  "range_limit",
+  "deviation_from_mean",
+  "deviation_pct",
+  "in_range",
+  "hist_1",
+  "hist_2",
+  "hist_3",
+  "hist_delta_1",
+  "hist_delta_2",
+  "hist_delta_3",
+  "trend_sign",
+  "history_count"
+]

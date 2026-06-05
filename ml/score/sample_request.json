@@ -1,0 +1,18 @@
+{
+  "input_data": {
+    "columns": [
+      "control_value", "lower_limit", "upper_limit",
+      "mean_limit", "range_limit",
+      "deviation_from_mean", "deviation_pct",
+      "in_range",
+      "hist_1", "hist_2", "hist_3",
+      "hist_delta_1", "hist_delta_2", "hist_delta_3",
+      "trend_sign", "history_count"
+    ],
+    "data": [
+      [12.2, 11.0, 13.0, 12.0, 2.0, 0.2, 0.10, 1, 12.0, 11.9, 12.1,  0.2,  0.1, -0.2, 0, 3],
+      [14.2, 11.0, 13.0, 12.0, 2.0, 2.2, 1.10, 0, 13.5, 12.1, 11.8,  0.7,  1.4,  0.3, 0, 3],
+      [12.9, 11.0, 13.0, 12.0, 2.0, 0.9, 0.45, 1, 12.6, 12.3, 12.0,  0.3,  0.3,  0.3, 1, 3]
+    ]
+  }
+}

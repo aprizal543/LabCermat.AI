@@ -1,0 +1,161 @@
+{
+  "model": "RandomForestClassifier",
+  "baseline": "LogisticRegression",
+  "random_state": 42,
+  "train_rows": 7000,
+  "val_rows": 1500,
+  "test_rows": 1500,
+  "smoke_test": false,
+  "baseline_val": {
+    "split": "baseline_val",
+    "accuracy": 0.7526666666666667,
+    "macro_f1": 0.7291572587836167,
+    "precision_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 0.28790786948176583
+    },
+    "recall_per_class": {
+      "stabil": 0.5877777777777777,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "confusion_matrix": [
+      [
+        529,
+        0,
+        371
+      ],
+      [
+        0,
+        450,
+        0
+      ],
+      [
+        0,
+        0,
+        150
+      ]
+    ],
+    "classes": [
+      "stabil",
+      "perlu_perhatian",
+      "potensi_drift"
+    ]
+  },
+  "baseline_test": {
+    "split": "baseline_test",
+    "accuracy": 0.7566666666666667,
+    "macro_f1": 0.7322574729506695,
+    "precision_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 0.2912621359223301
+    },
+    "recall_per_class": {
+      "stabil": 0.5944444444444444,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "confusion_matrix": [
+      [
+        535,
+        0,
+        365
+      ],
+      [
+        0,
+        450,
+        0
+      ],
+      [
+        0,
+        0,
+        150
+      ]
+    ],
+    "classes": [
+      "stabil",
+      "perlu_perhatian",
+      "potensi_drift"
+    ]
+  },
+  "val": {
+    "split": "rf_val",
+    "accuracy": 1.0,
+    "macro_f1": 1.0,
+    "precision_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "recall_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "confusion_matrix": [
+      [
+        900,
+        0,
+        0
+      ],
+      [
+        0,
+        450,
+        0
+      ],
+      [
+        0,
+        0,
+        150
+      ]
+    ],
+    "classes": [
+      "stabil",
+      "perlu_perhatian",
+      "potensi_drift"
+    ]
+  },
+  "test": {
+    "split": "rf_test",
+    "accuracy": 1.0,
+    "macro_f1": 1.0,
+    "precision_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "recall_per_class": {
+      "stabil": 1.0,
+      "perlu_perhatian": 1.0,
+      "potensi_drift": 1.0
+    },
+    "confusion_matrix": [
+      [
+        900,
+        0,
+        0
+      ],
+      [
+        0,
+        450,
+        0
+      ],
+      [
+        0,
+        0,
+        150
+      ]
+    ],
+    "classes": [
+      "stabil",
+      "perlu_perhatian",
+      "potensi_drift"
+    ]
+  },
+  "thresholds": {
+    "min_accuracy": 0.85,
+    "min_macro_f1": 0.8
+  }
+}

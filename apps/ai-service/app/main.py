@@ -13,9 +13,11 @@ from app.core.logging import logger
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     logger.info(
-        "LabCermat AI Service v%s starting | env=%s | mode=placeholder",
+        "LabCermat AI Service v%s starting | env=%s | ai_mode=%s | model_dir=%s",
         settings.app_version,
         settings.app_env,
+        settings.ai_mode,
+        settings.azure_ml_model_dir or "(not set)",
     )
     yield
     logger.info("LabCermat AI Service shutting down")
@@ -23,7 +25,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="LabCermat AI Service",
-    description="AI service placeholder untuk Sprint 1. Logic AI diimplementasikan di Sprint 6+.",
+    description="LabCermat AI Service",
     version=settings.app_version,
     lifespan=lifespan,
     docs_url="/docs",
@@ -33,7 +35,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3001", "http://localhost:5175"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

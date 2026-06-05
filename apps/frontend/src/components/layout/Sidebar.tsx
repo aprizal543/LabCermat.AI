@@ -1,19 +1,19 @@
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAnalysisDashboard, useSupervisorDashboard } from '@/hooks/useDashboard';
 import {
   Activity,
   ClipboardList,
-  FileText,
   FlaskConical,
   LayoutDashboard,
   LogOut,
   Microscope,
   ShieldCheck,
-  TestTube,
   BookOpen,
   CheckSquare,
 } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 
 // ─── Nav item type ─────────────────────────────────────────────
 
@@ -28,12 +28,10 @@ interface NavItem {
 const NAV_ANALIS: NavItem[] = [
   { label: 'Dashboard',        to: '/',                icon: <LayoutDashboard size={17} /> },
   { label: 'Sampel',           to: '/samples',         icon: <FlaskConical size={17} /> },
-  { label: 'Persiapan Sampel', to: '/sample-prep',     icon: <TestTube size={17} /> },
   { label: 'Analisis Hasil',   to: '/results',         icon: <Microscope size={17} /> },
   { label: 'QC Harian',        to: '/qc',              icon: <ShieldCheck size={17} /> },
-  { label: 'Dokumen Lab',      to: '/documents',       icon: <FileText size={17} /> },
   { label: 'Riwayat',          to: '/activity',        icon: <Activity size={17} /> },
-  { label: 'SOP Lab',          to: '/sop',             icon: <BookOpen size={17} /> },
+  { label: 'Asisten SOP',      to: '/sop',             icon: <BookOpen size={17} /> },
 ];
 
 const NAV_SUPERVISOR: NavItem[] = [
@@ -42,8 +40,7 @@ const NAV_SUPERVISOR: NavItem[] = [
   { label: 'QC Harian',        to: '/qc',              icon: <ShieldCheck size={17} /> },
   { label: 'Sampel',           to: '/samples',         icon: <FlaskConical size={17} /> },
   { label: 'Riwayat',          to: '/activity',        icon: <Activity size={17} /> },
-  { label: 'Dokumen Lab',      to: '/documents',       icon: <FileText size={17} /> },
-  { label: 'SOP Lab',          to: '/sop',             icon: <BookOpen size={17} /> },
+  { label: 'Asisten SOP',      to: '/sop',             icon: <BookOpen size={17} /> },
 ];
 
 const NAV_DEFAULT: NavItem[] = [
@@ -73,6 +70,40 @@ const ROLE_LABEL: Record<string, string> = {
   auditor:    'Auditor',
 };
 
+// ─── Shift helper ──────────────────────────────────────────────
+
+function getCurrentShift(now: Date): string {
+  const hour = now.getHours();
+  if (hour >= 7 && hour < 12) return 'Shift Pagi';
+  if (hour >= 12 && hour < 18) return 'Shift Sore';
+  if (hour >= 18 && hour < 23) return 'Shift Malam';
+  return 'Di Luar Shift';
+}
+
+// ─── Shift card stats (role-aware) ────────────────────────────
+
+function useShiftStats(role?: string) {
+  const analis = useAnalysisDashboard();
+  const supervisor = useSupervisorDashboard();
+
+  if (role === 'analis') {
+    const d = analis.data?.data;
+    const sampel = d?.totalToday ?? 0;
+    const qc = (d?.qcHariIni?.stabil ?? 0) + (d?.qcHariIni?.perluPerhatian ?? 0);
+    return { sampel, qc };
+  }
+
+  if (role === 'supervisor') {
+    const d = supervisor.data?.data;
+    // supervisor dashboard has tervalidasiHariIni as proxy for processed samples today
+    const sampel = d?.tervalidasiHariIni ?? 0;
+    const qc = d?.qcPerluPerhatian ?? 0;
+    return { sampel, qc };
+  }
+
+  return { sampel: 0, qc: 0 };
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────
 
 export function Sidebar() {
@@ -80,6 +111,16 @@ export function Sidebar() {
   const navigate = useNavigate();
   const role = appUser?.role.name;
   const navItems = getNavItems(role);
+
+  // Real-time shift (updates every minute)
+  const [shift, setShift] = useState(() => getCurrentShift(new Date()));
+  useEffect(() => {
+    const tick = () => setShift(getCurrentShift(new Date()));
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { sampel, qc } = useShiftStats(role);
 
   const handleLogout = async () => {
     await logout();
@@ -103,7 +144,7 @@ export function Sidebar() {
       {/* Shift card */}
       <div className="mx-3 my-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-slate-700">Shift Pagi</p>
+          <p className="text-xs font-medium text-slate-700">{shift}</p>
           <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
             Aktif
           </span>
@@ -112,8 +153,8 @@ export function Sidebar() {
           {appUser?.laboratory.name ?? 'Laboratorium'}
         </p>
         <div className="mt-2 flex gap-3 text-[10px] text-slate-400">
-          <span>Sampel: <span className="font-medium text-slate-500">—</span></span>
-          <span>QC: <span className="font-medium text-slate-500">—</span></span>
+          <span>Sampel: <span className="font-medium text-slate-500">{sampel}</span></span>
+          <span>QC: <span className="font-medium text-slate-500">{qc}</span></span>
         </div>
       </div>
 

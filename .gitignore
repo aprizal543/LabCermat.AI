@@ -81,3 +81,26 @@ coverage/
 # Shared types build output
 # ============================================================
 packages/shared-types/dist/
+
+# ============================================================
+# ML — Sprint 7
+# ============================================================
+# Dataset CSV — generate lokal, tidak perlu di-commit
+ml/data/*.csv
+
+# Model artifacts — disimpan di Azure ML, bukan di repo
+ml/outputs/*.pkl
+ml/outputs/*.joblib
+ml/outputs/*.json
+ml/outputs/*.npz
+ml/artifacts/
+
+# Scikit-learn / joblib artifacts di manapun dalam repo
+*.pkl
+*.joblib
+
+# Azure ML run artifacts (jika ada local download)
+mlruns/
+.mlflow/
+azureml-logs/
+azureml_cr/

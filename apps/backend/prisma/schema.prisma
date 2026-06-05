@@ -1,9 +1,11 @@
 // ============================================================
-// LabCermat — Prisma Schema v5.0
+// LabCermat — Prisma Schema v8.0
 // Sprint 1: roles, laboratories, users, samples,
 //           sample_status_logs, audit_logs
 // Sprint 4: sample_results
 // Sprint 5: qc_instruments, qc_records
+// Sprint 6: ai_analysis_logs
+// Sprint 8: sop_documents
 // ============================================================
 
 generator client {
@@ -52,6 +54,13 @@ enum QcStatus {
   perlu_perhatian
 }
 
+enum SopDocumentStatus {
+  pending
+  parsed
+  indexed
+  failed
+}
+
 // ============================================================
 // MODEL: Role
 // Dibuat pertama — users FK ke sini
@@ -84,10 +93,12 @@ model Laboratory {
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
 
-  users         User[]
-  samples       Sample[]
-  qcInstruments QcInstrument[]
-  qcRecords     QcRecord[]
+  users           User[]
+  samples         Sample[]
+  qcInstruments   QcInstrument[]
+  qcRecords       QcRecord[]
+  aiAnalysisLogs  AiAnalysisLog[]
+  sopDocuments    SopDocument[]
 
   @@map("laboratories")
 }
@@ -116,6 +127,7 @@ model User {
   auditLogs         AuditLog[]
   resultsInput      SampleResult[]    @relation("ResultInputBy")
   qcRecorded        QcRecord[]        @relation("QcRecordedBy")
+  sopDocuments      SopDocument[]     @relation("SopUploadedBy")
 
   @@map("users")
 }
@@ -258,4 +270,54 @@ model QcRecord {
   recorder   User         @relation("QcRecordedBy", fields: [recordedBy], references: [id])
 
   @@map("qc_records")
+}
+
+// ============================================================
+// MODEL: AiAnalysisLog
+// Append-only — setiap analisis AI disimpan di sini
+// responseData bersifat fleksibel (Json) untuk semua tipe output AI
+// ============================================================
+
+model AiAnalysisLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  laboratoryId String   @map("laboratory_id") @db.Uuid
+  analysisType String   @map("analysis_type") @db.VarChar(50)
+  entityType   String?  @map("entity_type") @db.VarChar(50)
+  entityId     String?  @map("entity_id") @db.Uuid
+  requestData  Json     @map("request_data")
+  responseData Json     @map("response_data")
+  mode         String   @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  laboratory Laboratory @relation(fields: [laboratoryId], references: [id])
+
+  @@map("ai_analysis_logs")
+}
+
+// ============================================================
+// MODEL: SopDocument
+// Metadata dokumen SOP yang telah diparse + diindeks ke Azure AI Search
+// Konten/chunks disimpan di Azure AI Search, bukan di sini
+// Sprint 8
+// ============================================================
+
+model SopDocument {
+  id               String            @id @default(uuid()) @db.Uuid
+  laboratoryId     String            @map("laboratory_id") @db.Uuid
+  title            String            @db.VarChar(255)
+  originalFilename String            @map("original_filename") @db.VarChar(255)
+  mimeType         String            @map("mime_type") @db.VarChar(100)
+  sizeBytes        Int               @map("size_bytes")
+  status           SopDocumentStatus @default(pending)
+  chunkCount       Int               @default(0) @map("chunk_count")
+  errorMessage     String?           @map("error_message")
+  uploadedById     String            @map("uploaded_by_id") @db.Uuid
+  indexedAt        DateTime?         @map("indexed_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  laboratory Laboratory @relation(fields: [laboratoryId], references: [id])
+  uploadedBy User       @relation("SopUploadedBy", fields: [uploadedById], references: [id])
+
+  @@map("sop_documents")
 }

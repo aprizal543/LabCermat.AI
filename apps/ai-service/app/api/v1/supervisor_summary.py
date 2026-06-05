@@ -7,6 +7,7 @@ from app.models.ai_models import (
     SupervisorSummaryRequest,
     SupervisorSummaryResponse,
 )
+from app.services import supervisor_summary_service
 
 router = APIRouter()
 
@@ -20,16 +21,18 @@ async def supervisor_summary(
     request: SupervisorSummaryRequest,
 ) -> SupervisorSummaryResponse:
     logger.info(
-        "supervisor-summary called | lab_id=%s | shift=%s to %s | mode=placeholder",
+        "supervisor-summary called | lab_id=%s | shift=%s to %s | mode=rule_based",
         request.laboratory_id,
         request.shift_start.isoformat(),
         request.shift_end.isoformat(),
     )
 
+    result = supervisor_summary_service.summarize(request)
+
     return SupervisorSummaryResponse(
-        summary="[PLACEHOLDER] Supervisor summary not yet implemented",
-        stats={},
-        focus_recommendations=[],
-        mode="placeholder",
+        summary=result.summary,
+        stats=result.stats,
+        focus_recommendations=result.focus_recommendations,
+        mode="rule_based",
         processed_at=datetime.now(timezone.utc).isoformat(),
     )

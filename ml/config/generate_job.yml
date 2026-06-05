@@ -1,0 +1,51 @@
+# Azure ML Command Job — Generate Synthetic QC Dataset
+#
+# Runs generate_dataset.py on the compute cluster and uploads the resulting
+# CSV to the Azure ML default datastore so it can be registered as a Data Asset.
+#
+# Usage:
+#   az ml job create --file ml/config/generate_job.yml \
+#     --resource-group rg-labcermat-dev \
+#     --workspace-name mlw-labcermat
+#
+# Monitor:
+#   az ml job show --name <run-id> --resource-group rg-labcermat-dev --workspace-name mlw-labcermat
+#
+# Download outputs after completion:
+#   az ml job download --name <run-id> --outputs --resource-group rg-labcermat-dev --workspace-name mlw-labcermat
+
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+type: command
+
+display_name: generate-qc-synthetic-dataset
+description: >
+  Generate 10 000-row synthetic QC anomaly dataset (stabil / perlu_perhatian /
+  potensi_drift) and upload to default datastore for Data Asset registration.
+  Labels: 0=stabil (~60%), 1=perlu_perhatian (~30%), 2=potensi_drift (~10%).
+
+# Cost note: Standard_DS2_v2 (2 core / 7 GB) is sufficient for pure data
+# generation. This job runs for <5 minutes — compute cost is negligible.
+compute: azureml:cpu-cluster-dev
+
+# Use the Azure ML curated environment for Python 3.10 + scikit-learn 1.5.
+# No custom Docker image needed.
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+
+# Source code folder — only the data sub-folder is needed for this job.
+code: ../data
+
+command: >-
+  python generate_dataset.py
+  --rows 10000
+  --output ${{outputs.dataset_dir}}/qc_synthetic.csv
+  --random-state 42
+
+outputs:
+  dataset_dir:
+    type: uri_folder
+    mode: rw_mount
+
+# Resource limits — kept minimal to preserve Azure credit
+resources:
+  instance_count: 1

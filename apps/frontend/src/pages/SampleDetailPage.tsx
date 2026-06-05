@@ -16,6 +16,7 @@ import { useSampleDetail, useUpdateSampleStatus } from '@/hooks/useSamples';
 import { PriorityBadge } from '@/components/samples/PriorityBadge';
 import { ResultsSection } from '@/components/samples/ResultsSection';
 import { StatusBadge } from '@/components/samples/StatusBadge';
+import { AiResultCard } from '@/components/ai/AiResultCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -527,6 +528,9 @@ export function SampleDetailPage() {
         status={sample.status}
         role={appUser?.role.name ?? ''}
       />
+
+      {/* Tinjauan AI — tampil setelah hasil ada, non-blocking */}
+      <AiResultCard sampleId={sample.id} />
 
       {/* Status timeline */}
       <Card>

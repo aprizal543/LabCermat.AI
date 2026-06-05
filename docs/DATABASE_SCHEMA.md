@@ -1,6 +1,6 @@
 # LabCermat — Database Schema
 
-**Versi:** 5.0 — Sprint 5  
+**Versi:** 8.0 — Sprint 8  
 **Provider:** Supabase PostgreSQL  
 **ORM:** Prisma v5
 
@@ -17,6 +17,10 @@
   - [samples](#samples)
   - [sample_status_logs](#sample_status_logs)
   - [audit_logs](#audit_logs)
+  - [sample_results](#sample_results)
+  - [qc_instruments](#qc_instruments)
+  - [qc_records](#qc_records)
+  - [ai_analysis_logs](#ai_analysis_logs)
 - [Relasi Antar Tabel](#relasi-antar-tabel)
 - [Aturan Penting](#aturan-penting)
 - [Koneksi Database](#koneksi-database)
@@ -36,8 +40,10 @@
 | `sample_results` | Hasil pemeriksaan per parameter per sampel | 4 |
 | `qc_instruments` | Master alat QC per laboratorium | 5 |
 | `qc_records` | Catatan QC harian per alat (append-only) | 5 |
+| `ai_analysis_logs` | Log hasil analisis AI per entitas | 6 |
+| `sop_documents` | Metadata dokumen SOP yang telah diparse + diindeks | 8 |
 
-**Total tabel Sprint 5: 9**
+**Total tabel Sprint 8: 11**
 
 ---
 
@@ -356,17 +362,93 @@ Catatan QC harian per alat. **Append-only — tidak ada UPDATE atau DELETE.**
 
 ---
 
+### `ai_analysis_logs`
+
+Log hasil analisis AI per entitas. Diisi oleh `AiService.saveLog()` setelah setiap panggilan AI service. **Append-only — tidak ada UPDATE atau DELETE.**
+
+| Kolom | Tipe DB | Prisma Type | Constraint | Keterangan |
+|---|---|---|---|---|
+| `id` | `uuid` | `String` | PK, `@db.Uuid` | UUID auto-generated |
+| `laboratory_id` | `uuid` | `String` | `FK → laboratories.id, @db.Uuid` | Lab pemilik log |
+| `analysis_type` | `varchar(50)` | `String` | `NOT NULL` | Jenis analisis: `qc_anomaly`, `result_review`, `sample_prioritization`, `supervisor_summary` |
+| `entity_type` | `varchar(50)` | `String?` | NULLABLE | Jenis entitas: `qc_record`, `sample`, `laboratory` |
+| `entity_id` | `uuid` | `String?` | NULLABLE, `@db.Uuid` | ID entitas yang dianalisis |
+| `request_data` | `jsonb` | `Json` | `NOT NULL` | Payload yang dikirim ke AI service |
+| `response_data` | `jsonb` | `Json` | `NOT NULL` | Respons mentah dari AI service |
+| `mode` | `varchar(20)` | `String` | `NOT NULL` | Mode AI: `rule_based` |
+| `created_at` | `timestamptz` | `DateTime` | `DEFAULT now()` | Waktu analisis |
+
+**Tidak ada `updated_at`** — baris tidak pernah diupdate.
+
+**Nilai `analysis_type`:**
+
+| Nilai | Trigger | `entity_type` |
+|---|---|---|
+| `qc_anomaly` | Setelah `POST /qc/records` | `qc_record` |
+| `result_review` | Setelah `POST /samples/:id/results` | `sample` |
+| `sample_prioritization` | `POST /api/v1/ai/prioritize` | `laboratory` |
+| `supervisor_summary` | `POST /api/v1/ai/supervisor-summary` | `laboratory` |
+| `sop_question` | `POST /api/v1/ai/sop-question` | `laboratory` |
+
+**Catatan `potensi_drift`:** Status ini hanya ada di kolom `response_data` (JSON) — tidak masuk ke enum Prisma `QcStatus` yang tetap `stabil` | `perlu_perhatian`.
+
+**Relasi:**
+- `laboratory_id` → `laboratories.id` (N:1)
+
+---
+
+### `sop_documents`
+
+Metadata dokumen SOP yang telah diparse via Azure Document Intelligence dan diindeks ke Azure AI Search.  
+**Konten/chunk tidak disimpan di sini** — hanya di Azure AI Search index `labcermat-sop-index`.
+
+| Kolom | Tipe DB | Prisma Type | Constraint | Keterangan |
+|---|---|---|---|---|
+| `id` | `uuid` | `String` | PK, `@db.Uuid` | UUID auto-generated |
+| `laboratory_id` | `uuid` | `String` | `FK → laboratories.id, @db.Uuid` | Lab pemilik dokumen |
+| `title` | `varchar(255)` | `String` | `NOT NULL` | Judul dokumen (user-supplied atau dari filename) |
+| `original_filename` | `varchar(255)` | `String` | `NOT NULL` | Nama file asli yang diunggah |
+| `mime_type` | `varchar(100)` | `String` | `NOT NULL` | MIME type (selalu `application/pdf` untuk MVP) |
+| `size_bytes` | `int4` | `Int` | `NOT NULL` | Ukuran file dalam byte |
+| `status` | `sop_document_status` (enum) | `SopDocumentStatus` | `DEFAULT pending` | Status pemrosesan |
+| `chunk_count` | `int4` | `Int` | `DEFAULT 0` | Jumlah chunk yang berhasil diindeks |
+| `error_message` | `text` | `String?` | NULLABLE | Pesan error jika status = `failed` |
+| `uploaded_by_id` | `uuid` | `String` | `FK → users.id, @db.Uuid` | User yang mengunggah |
+| `indexed_at` | `timestamptz` | `DateTime?` | NULLABLE | Waktu selesai diindeks |
+| `created_at` | `timestamptz` | `DateTime` | `DEFAULT now()` | Waktu upload |
+| `updated_at` | `timestamptz` | `DateTime` | `@updatedAt` | Waktu update terakhir |
+
+**Enum `SopDocumentStatus`:**
+
+| Nilai | Keterangan |
+|---|---|
+| `pending` | Baru dibuat, belum diproses |
+| `parsed` | Berhasil diparsing, belum diindeks |
+| `indexed` | Berhasil diparse + diindeks ke Azure AI Search |
+| `failed` | Gagal — lihat `error_message` |
+
+**Relasi:**
+- `laboratory_id` → `laboratories.id` (N:1)
+- `uploaded_by_id` → `users.id` (N:1)
+
+---
+
 ## Relasi Antar Tabel
 
 ```
 laboratories ──< users >──────── roles
      │               │
-     └──────────< samples
-                     │
-        ┌────────────┼──────────────┐
-        │            │              │
-sample_status_logs  audit_logs  sample_results
-(via sample_id)  (via entity_id) (via sample_id)
+     ├──────────< samples
+     │               │
+     │  ┌────────────┼──────────────┐
+     │  │            │              │
+     │ sample_status_logs  audit_logs  sample_results
+     │
+     ├──────────< qc_instruments ──< qc_records
+     │
+     ├──────────< ai_analysis_logs
+     │
+     └──────────< sop_documents >──── users (uploaded_by)
 ```
 
 **Ringkasan FK:**
@@ -382,6 +464,10 @@ sample_status_logs  audit_logs  sample_results
 | `audit_logs` | `user_id` | `users.id` (nullable) |
 | `sample_results` | `sample_id` | `samples.id` |
 | `sample_results` | `input_by` | `users.id` |
+| `qc_instruments` | `laboratory_id` | `laboratories.id` |
+| `qc_records` | `instrument_id` | `qc_instruments.id` |
+| `qc_records` | `laboratory_id` | `laboratories.id` |
+| `ai_analysis_logs` | `laboratory_id` | `laboratories.id` |
 
 ---
 

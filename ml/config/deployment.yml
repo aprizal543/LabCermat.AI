@@ -1,0 +1,71 @@
+# Azure ML Managed Online Deployment — QC Anomaly Detector (blue)
+#
+# Prerequisites:
+#   1. Endpoint ep-qc-anomaly must exist (endpoint.yml applied first)
+#   2. Model azureml:qc-anomaly-detector:1 must be registered (Langkah 5)
+#
+# CREATE deployment:
+#
+#   az ml online-deployment create \
+#     --file ml/config/deployment.yml \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat \
+#     --all-traffic
+#
+#   --all-traffic routes 100% of requests to this deployment automatically.
+#
+# CHECK deployment status:
+#
+#   az ml online-deployment show \
+#     --name blue \
+#     --endpoint-name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# INVOKE / TEST endpoint after deployment:
+#
+#   az ml online-endpoint invoke \
+#     --name ep-qc-anomaly \
+#     --request-file ml/score/sample_request.json \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# GET deployment logs (useful to debug init() errors):
+#
+#   az ml online-deployment get-logs \
+#     --name blue \
+#     --endpoint-name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat
+#
+# DELETE endpoint to stop billing:
+#
+#   az ml online-endpoint delete \
+#     --name ep-qc-anomaly \
+#     --resource-group rg-labcermat-ml-eastasia \
+#     --workspace-name mlw-labcermat \
+#     --yes
+
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineDeployment.schema.json
+
+name: blue
+endpoint_name: ep-qc-anomaly
+description: >
+  Blue deployment of qc-anomaly-detector:1.
+  Random Forest classifier trained on synthetic QC dataset.
+
+model: azureml:qc-anomaly-detector:1
+
+code_configuration:
+  code: ../score
+  scoring_script: score.py
+
+# Curated environment matching training — Python 3.10, scikit-learn 1.5, pandas.
+# No custom Docker build needed; keeps deployment time and cost minimal.
+environment: azureml://registries/azureml/environments/sklearn-1.5/labels/latest
+
+# Cost guardrail: Standard_DS2_v2 (2 core / 7 GB) is the smallest instance
+# that comfortably runs scikit-learn inference. Use instance_count: 1.
+# DELETE the endpoint after demo to avoid ongoing charges (~$0.10/hr).
+instance_type: Standard_DS2_v2
+instance_count: 1

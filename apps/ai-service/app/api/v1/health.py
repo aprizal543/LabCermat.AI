@@ -15,5 +15,5 @@ async def health_check() -> HealthResponse:
         service="labcermat-ai-service",
         version=settings.app_version,
         timestamp=datetime.now(timezone.utc).isoformat(),
-        mode="placeholder",
+        mode=settings.ai_mode,
     )

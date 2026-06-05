@@ -5,6 +5,8 @@ from .sample_prioritization import router as sample_prioritization_router
 from .result_review import router as result_review_router
 from .qc_anomaly import router as qc_anomaly_router
 from .supervisor_summary import router as supervisor_summary_router
+from .sop import router as sop_router
+from .sop_documents import router as sop_documents_router
 
 # Router root — health dipasang di /health (tanpa prefix ai/v1)
 root_router = APIRouter()
@@ -16,3 +18,5 @@ ai_router.include_router(sample_prioritization_router)
 ai_router.include_router(result_review_router)
 ai_router.include_router(qc_anomaly_router)
 ai_router.include_router(supervisor_summary_router)
+ai_router.include_router(sop_router)
+ai_router.include_router(sop_documents_router)

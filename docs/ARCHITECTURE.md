@@ -1,7 +1,7 @@
 # LabCermat — Architecture
 
-**Versi:** 5.0 — Sprint 5  
-**Status:** QC Harian Digital & Audit Log aktif
+**Versi:** 8.0 — Sprint 8  
+**Status:** SOP Assistant (BM25 + Groq) aktif; Azure ML Artifact Inference (Sprint 7) tetap aktif
 
 ---
 
@@ -22,7 +22,7 @@ LabCermat dibangun sebagai **monorepo production** dengan tiga service utama yan
 │              localhost:3001                 │
 └────────────┬──────────────┬─────────────────┘
              │              │
-   Prisma ORM│         HTTP │ (Sprint 6+)
+   Prisma ORM│         HTTP │ (AiModule — Sprint 6)
              │              │
 ┌────────────▼───┐  ┌───────▼─────────────────┐
 │   Supabase     │  │     AI Service          │
@@ -103,7 +103,10 @@ src/
     ├── auth/        # Supabase Auth sync + JWT guard (Sprint 2)
     ├── samples/     # Sample workflow — CRUD + state machine (Sprint 3+4)
     ├── results/     # Input + list hasil pemeriksaan (Sprint 4)
-    └── dashboard/   # Dashboard aggregasi per role (Sprint 3+4)
+    ├── dashboard/   # Dashboard aggregasi per role (Sprint 3+4)
+    ├── qc/          # QC harian digital (Sprint 5)
+    ├── ai/          # AI gateway + log (Sprint 6+8)
+    └── sop-documents/ # SOP document upload/list/delete (Sprint 8)
 ```
 
 **PrismaModule** di-mark `@Global()` — tersedia di semua module tanpa perlu import ulang.
@@ -119,19 +122,55 @@ src/
 | Validation | Pydantic v2 | Request/response schema ketat |
 | Config | pydantic-settings | Env var dengan type safety |
 | Port | 8000 | Konfigurasi di `APP_PORT` env |
-| Mode saat ini | `placeholder` | Logic AI belum aktif (Sprint 6+) |
+| Mode QC (Sprint 7) | `azure_ml_artifact` atau `rule_based` | Dikontrol via `AI_MODE` env var |
+| Mode Generatif (Sprint 8) | `groq` atau `template_fallback` | Dikontrol via `AI_GENERATIVE_PROVIDER` |
 | Virtual env | `labcermat/` | Folder di dalam `apps/ai-service/` |
 
 **Endpoint structure:**
 ```
-GET  /health                      # Health check
-POST /ai/v1/sample-prioritization # Sprint 6
-POST /ai/v1/result-review         # Sprint 6
-POST /ai/v1/qc-anomaly            # Sprint 6
-POST /ai/v1/supervisor-summary    # Sprint 6
+GET  /health                      # Health check — mode aktif dari AI_MODE
+POST /ai/v1/sample-prioritization # Scoring prioritas sampel (rule-based)
+POST /ai/v1/result-review         # Flag hasil pemeriksaan (rule-based)
+POST /ai/v1/qc-anomaly            # Deteksi anomali QC — Azure ML artifact atau rule-based
+POST /ai/v1/supervisor-summary    # Ringkasan shift supervisor (rule-based)
+POST /ai/v1/sop-question          # Sprint 8 — SOP tanya jawab BM25 + Groq/template answer
+POST /ai/v1/sop-documents/parse-index  # Sprint 8 — Parse PDF + indeks ke Azure AI Search
+DELETE /ai/v1/sop-documents/{id}/index # Sprint 8 — Hapus index dokumen dari Azure AI Search
 ```
 
-Semua AI endpoint mengembalikan `"mode": "placeholder"` sampai Sprint 6 diimplementasikan.
+**Services (apps/ai-service/app/services/):**
+```
+prioritization_service.py    # Rule-based score: priority base + age + recheck
+result_review_service.py     # Flag out-of-range, extreme, non-numeric
+qc_anomaly_service.py        # Westgard T4 — full-series monotonic trend (fallback)
+qc_anomaly_ml_service.py     # Sprint 7 — sklearn inference dari Azure ML artifact
+supervisor_summary_service.py # Template-based Indonesian summary
+document_service.py          # Sprint 8 — Azure Document Intelligence parse + chunk
+search_service.py            # Sprint 8 — Azure AI Search BM25/keyword index + query
+sop_service.py               # Sprint 8 — BM25 retrieval + delegate ke generative_service
+generative_service.py        # Sprint 8 — Groq LLaMA generative answer + template fallback
+```
+
+**Mode QC Anomaly (`AI_MODE` env var):**
+
+| `AI_MODE` | Service | Response `mode` |
+|---|---|---|
+| `azure_ml_artifact` | `qc_anomaly_ml_service` | `azure_ml_artifact` |
+| `azure_ml_artifact` (artifact error) | `qc_anomaly_ml_service` → fallback | `fallback_rule_based` |
+| `rule_based` (default) | `qc_anomaly_service` | `rule_based` |
+
+**Azure ML Artifact Inference (Sprint 7):**
+- Model `qc-anomaly-detector:1` dilatih di Azure ML Compute Cluster
+- Artifact di-download dari Azure ML Model Registry via `az ml model download`
+- Inference dijalankan in-process (sklearn) — tidak memerlukan Managed Online Endpoint
+- `AZURE_ML_MODEL_DIR` menunjuk ke folder artifact hasil download
+- Thread-safe lazy loading dengan `threading.Lock()` — artifact dimuat sekali saat startup
+
+**Pola pemanggilan dari Backend:**
+- `AiModule` diekspor dan diimpor oleh `ResultsModule` dan `QcModule`
+- Hook otomatis (fire-and-forget) dipanggil dari `results.service.ts` dan `qc.service.ts` via private method `.catch()` — tidak pernah memblokir main flow
+- `AiService.saveLog()` dibungkus try/catch — tidak pernah throw
+- Timeout HTTP ke AI service: 10 detik (AbortController)
 
 ---
 
@@ -277,6 +316,7 @@ Format: `LAB-YYYYMMDD-XXXX` (4 digit, zero-padded). Dibuat dengan menghitung sam
 | `SampleDetailPage` | `/samples/:id` | Detail + hasil pemeriksaan + aksi analis + aksi supervisor |
 | `DashboardPage` (Analis) | `/` | Stats real: totalToday, dalamProses, menungguReview, tervalidasiHariIni, topPriority |
 | `DashboardPage` (Supervisor) | `/` | Stats real: menungguReview, tervalidasiHariIni, mintaCekUlang, daftar + aksi |
+| `SopAssistantPage` | `/sop` | Sprint 8 — Tanya jawab SOP BM25, source citation, safety note |
 
 Components Sprint 3: `StatusBadge`, `PriorityBadge`, `SampleForm`.  
 Components Sprint 4: `ResultForm` (modal input hasil), `ResultsSection` (tabel hasil + tombol Tambah).
@@ -320,6 +360,15 @@ Components Sprint 4: `ResultForm` (modal input hasil), `ResultsSection` (tabel h
 | `resolveUser()` query per request mutating | Single source of truth — role dari DB, bukan JWT claim yang bisa stale |
 | `prisma.$transaction` untuk sample + statusLog + auditLog | Atomicity — partial write ke 3 tabel tidak mungkin terjadi |
 | sampleCode retry on P2002 | Race condition volume rendah cukup ditangani 1 retry tanpa distributed lock |
+| Azure ML Managed Online Endpoint → FastAPI artifact inference | `SubscriptionNotRegistered` error pada Azure for Students — endpoint provisioning tidak tersedia; model tetap dilatih dan diregister di Azure ML |
+| sklearn inference in-process, bukan REST call ke endpoint | Latensi <10ms vs ~100–300ms; tidak memerlukan endpoint key; model dari Azure ML Registry tetap valid |
+| `AI_MODE` env var memilih service per-request | Memungkinkan switch rule_based↔azure_ml_artifact tanpa deploy ulang; default `rule_based` aman jika artifact belum di-download |
+| Thread-safe lazy loading untuk model artifact | FastAPI multi-worker — `threading.Lock()` menjamin artifact dimuat sekali; `_load_error` sentinel mencegah retry I/O berulang |
+| Azure OpenAI / AI Foundry → Groq sebagai generative provider | Azure for Students region policy memblokir model deployment di region yang tersedia; Groq API (gratis, tanpa region restriction) dipakai sebagai pengganti |
+| BM25-only search, embedding/vector search ditunda | Azure OpenAI embedding endpoint tidak tersedia; BM25 dengan Indonesian Lucene analyzer (`id.lucene`) cukup untuk MVP use case keyword query SOP |
+| `AI_GENERATIVE_PROVIDER` env var memilih provider | Switch antara `groq` dan `template_fallback` tanpa restart jika hot-reload aktif; default `template_fallback` aman tanpa API key |
+| Template BM25 sebagai tiga-tier fallback generatif | Endpoint selalu merespons: `groq_llm` → `fallback_template_bm25` → `template_bm25`; tidak ada single point of failure di layer generatif |
+| SOP chunks disimpan di Azure AI Search, bukan database | Search index dioptimalkan untuk full-text BM25; `sop_documents` di Prisma hanya menyimpan metadata (status, chunk count, timestamps) |
 
 ---
 
@@ -330,7 +379,8 @@ Components Sprint 4: `ResultForm` (modal input hasil), `ResultsSection` (tabel h
 | Sprint 2 | ✅ Supabase Auth, JWT guard, sync-user, role-based sidebar, protected routes |
 | Sprint 3 | ✅ Sample workflow state machine, status log service, dashboard aggregasi, role enforcement backend |
 | Sprint 4 | ✅ Input hasil pemeriksaan (`sample_results`), supervisor review (validasi/cek ulang/batalkan), dashboard real data Sprint 4 |
-| Sprint 5 | QC harian digital, audit log service, riwayat aktivitas |
-| Sprint 6 | AI service rule-based logic, backend AI gateway |
-| Sprint 7 | Azure OpenAI, Document Intelligence, AI Search, Blob Storage |
-| Sprint 8 | CI/CD GitHub Actions, Azure deployment, Application Insights |
+| Sprint 5 | ✅ QC harian digital, audit log service, riwayat aktivitas |
+| Sprint 6 | ✅ AI service rule-based baseline, AiModule backend, ai_analysis_logs, frontend AI components |
+| Sprint 7 | ✅ Azure ML custom model (QC anomaly), artifact inference via FastAPI, frontend mode badge |
+| Sprint 8 | ✅ SOP Assistant (BM25 + Groq), Document Upload/Parse/Index, Azure AI Search, sop_documents tabel |
+| Sprint 9 | CI/CD GitHub Actions, Azure deployment, Application Insights |

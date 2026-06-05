@@ -7,8 +7,11 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
 import { SamplesPage } from '@/pages/SamplesPage';
 import { SampleDetailPage } from '@/pages/SampleDetailPage';
+import { ResultsPage } from '@/pages/ResultsPage';
+import { ReviewPage } from '@/pages/ReviewPage';
 import { QcPage } from '@/pages/QcPage';
 import { ActivityPage } from '@/pages/ActivityPage';
+import { SopAssistantPage } from '@/pages/SopAssistantPage';
 import { Loader2 } from 'lucide-react';
 
 // ─── Splash spinner ────────────────────────────────────────────
@@ -75,11 +78,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'sample-prep',
-            element: <PlaceholderPage title="Persiapan Sampel" sprint="Sprint 3" description="Persiapan dan penerimaan sampel sebelum pemeriksaan." />,
+            element: <Navigate to="/samples" replace />,
           },
           {
             path: 'results',
-            element: <PlaceholderPage title="Analisis Hasil" sprint="Sprint 4" description="Input dan analisis hasil pemeriksaan laboratorium." />,
+            element: <ResultsPage />,
           },
           {
             path: 'qc',
@@ -87,7 +90,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'documents',
-            element: <PlaceholderPage title="Dokumen Lab" sprint="Sprint 7" description="Upload dan manajemen dokumen laboratorium." />,
+            element: <Navigate to="/sop" replace />,
           },
           {
             path: 'activity',
@@ -95,13 +98,13 @@ export const router = createBrowserRouter([
           },
           {
             path: 'sop',
-            element: <PlaceholderPage title="SOP Lab" sprint="Sprint 7" description="Prosedur operasional standar laboratorium." />,
+            element: <SopAssistantPage />,
           },
 
           // Supervisor routes
           {
             path: 'reviews',
-            element: <PlaceholderPage title="Review Hasil" sprint="Sprint 4" description="Review dan validasi hasil pemeriksaan oleh supervisor." />,
+            element: <ReviewPage />,
           },
 
           // Shared routes
